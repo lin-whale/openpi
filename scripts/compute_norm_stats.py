@@ -86,9 +86,11 @@ def create_rlds_dataloader(
     return data_loader, num_batches
 
 
-def main(config_name: str, max_frames: int | None = None):
+def main(config_name: str, max_frames: int | None = None, repo_id: str | None = None) -> None:
     config = _config.get_config(config_name)
+    # print(config)
     data_config = config.data.create(config.assets_dirs, config.model)
+    # data_config.repo_id = repo_id
 
     if data_config.rlds_data_dir is not None:
         data_loader, num_batches = create_rlds_dataloader(

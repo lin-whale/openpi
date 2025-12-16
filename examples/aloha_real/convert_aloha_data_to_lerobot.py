@@ -10,9 +10,10 @@ import shutil
 from typing import Literal
 
 import h5py
-from lerobot.common.datasets.lerobot_dataset import LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.common.datasets.push_dataset_to_hub._download_raw import download_raw
+
+# from lerobot.common.datasets.push_dataset_to_hub._download_raw import download_raw
 import numpy as np
 import torch
 import tqdm
@@ -40,27 +41,29 @@ def create_empty_dataset(
     has_effort: bool = False,
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
 ) -> LeRobotDataset:
+    # Correct order of motors for Pi model Inputs
     motors = [
-        "right_waist",
-        "right_shoulder",
-        "right_elbow",
-        "right_forearm_roll",
-        "right_wrist_angle",
-        "right_wrist_rotate",
-        "right_gripper",
-        "left_waist",
-        "left_shoulder",
-        "left_elbow",
-        "left_forearm_roll",
-        "left_wrist_angle",
-        "left_wrist_rotate",
+        "left_1",
+        "left_2",
+        "left_3",
+        "left_4",
+        "left_5",
+        "left_6",
+        "left_7",
         "left_gripper",
+        "right_1",
+        "right_2",
+        "right_3",
+        "right_4",
+        "right_5",
+        "right_6",
+        "right_7",
+        "right_gripper",
     ]
     cameras = [
-        "cam_high",
-        "cam_low",
-        "cam_left_wrist",
-        "cam_right_wrist",
+        "top",
+        "left_wrist",
+        "right_wrist",
     ]
 
     features = {
@@ -109,12 +112,12 @@ def create_empty_dataset(
             ],
         }
 
-    if Path(LEROBOT_HOME / repo_id).exists():
-        shutil.rmtree(LEROBOT_HOME / repo_id)
+    if Path(HF_LEROBOT_HOME / repo_id).exists():
+        shutil.rmtree(HF_LEROBOT_HOME / repo_id)
 
     return LeRobotDataset.create(
         repo_id=repo_id,
-        fps=50,
+        fps=18,
         robot_type=robot_type,
         features=features,
         use_videos=dataset_config.use_videos,
@@ -180,12 +183,23 @@ def load_raw_episode_data(
         imgs_per_cam = load_raw_images_per_camera(
             ep,
             [
-                "cam_high",
-                "cam_low",
-                "cam_left_wrist",
-                "cam_right_wrist",
+                "top",
+                "left_wrist",
+                "right_wrist",
             ],
         )
+
+        # 把state, action, velocity 顺序转换为 left_joint, left_gripper, right_joint, right_gripper
+        # print("Before swapping:", state[0])
+        state_dim = state.shape[1]
+        front, back = state[:, : state_dim // 2], state[:, state_dim // 2 :]
+        state = torch.cat([back, front], dim=1)
+        front_a, back_a = action[:, : state_dim // 2], action[:, state_dim // 2 :]
+        action = torch.cat([back_a, front_a], dim=1)
+        if velocity is not None:
+            front_v, back_v = velocity[:, : state_dim // 2], velocity[:, state_dim // 2 :]
+            velocity = torch.cat([back_v, front_v], dim=1)
+        # print("After swapping:", state[0])
 
     return imgs_per_cam, state, action, velocity, effort
 
@@ -218,10 +232,11 @@ def populate_dataset(
                 frame["observation.velocity"] = velocity[i]
             if effort is not None:
                 frame["observation.effort"] = effort[i]
+            frame["task"] = task
 
             dataset.add_frame(frame)
 
-        dataset.save_episode(task=task)
+        dataset.save_episode()
 
     return dataset
 
@@ -230,21 +245,21 @@ def port_aloha(
     raw_dir: Path,
     repo_id: str,
     raw_repo_id: str | None = None,
-    task: str = "DEBUG",
+    task: str = "Fold the shorts on the bed.",
     *,
     episodes: list[int] | None = None,
-    push_to_hub: bool = True,
+    push_to_hub: bool = False,
     is_mobile: bool = False,
-    mode: Literal["video", "image"] = "image",
+    mode: Literal["video", "image"] = "video",
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
 ):
-    if (LEROBOT_HOME / repo_id).exists():
-        shutil.rmtree(LEROBOT_HOME / repo_id)
+    if (HF_LEROBOT_HOME / repo_id).exists():
+        shutil.rmtree(HF_LEROBOT_HOME / repo_id)
 
-    if not raw_dir.exists():
+    if not raw_dir.exists():  # noqa: SIM102
         if raw_repo_id is None:
             raise ValueError("raw_repo_id must be provided if raw_dir does not exist")
-        download_raw(raw_dir, repo_id=raw_repo_id)
+        # download_raw(raw_dir, repo_id=raw_repo_id)
 
     hdf5_files = sorted(raw_dir.glob("episode_*.hdf5"))
 
@@ -262,7 +277,8 @@ def port_aloha(
         task=task,
         episodes=episodes,
     )
-    dataset.consolidate()
+    # 新版本lerobot不需要 consolidate 这一步了
+    # dataset.consolidate()
 
     if push_to_hub:
         dataset.push_to_hub()
