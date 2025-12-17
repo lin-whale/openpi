@@ -1,5 +1,5 @@
 """
-Example client that connects to a WebSocket server and runs a policy for a number of steps.
+用于实际异步推理的客户端实现。
 """
 
 import dataclasses
@@ -14,7 +14,8 @@ import polars as pl
 import rich
 import tqdm
 import tyro
-from PIL import Image
+import rclpy
+from Ros_node import RosNode
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,20 @@ class TimingRecorder:
         frame.write_parquet(path)
 
 
+from threading import Lock, Thread
+
+
+def ros2_spin(node):
+    rclpy.spin(node)
+
+
 def main(args: Args) -> None:
+    action_lock = Lock()
+    rclpy.init()
+    ros2_node = RosNode(action_lock=action_lock)
+    ros2_thread = Thread(target=ros2_spin, args=(ros2_node,))
+    ros2_thread.start()
+    time.sleep(2)
     obs_fn = {
         EnvMode.ALOHA: _random_observation_aloha,
         EnvMode.ALOHA_SIM: _random_observation_aloha,
@@ -128,48 +142,9 @@ def main(args: Args) -> None:
         EnvMode.LIBERO: _random_observation_libero,
         EnvMode.ZME: _random_observation_zme,
     }[args.env]
-    obs = {}
-    obs["state"] = np.array(
-        [
-            -1.8909,
-            1.01,
-            2.63,
-            -2.92,
-            0.0249,
-            2.87,
-            -1.49,
-            -3.77,
-            -1.886,
-            1.0157,
-            2.63,
-            -2.92,
-            0.045,
-            2.87,
-            -1.48,
-            -5.018,
-        ]
-    )
-    # 从本地加载图像数据
-    obs["images"] = {
-        "cam_high": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
-        "cam_left_wrist": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
-        "cam_right_wrist": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
-    }
-    obs["prompt"] = "Fold the shorts on the bed."
-    obs["images"]["cam_high"] = Image.open(
-        "/home/zme/.cache/huggingface/lerobot/zme/fold_clothes_test/images/observation.images.left_wrist/episode_000000/frame_000000.png"
-    )
-    obs["images"]["cam_left_wrist"] = Image.open(
-        "/home/zme/.cache/huggingface/lerobot/zme/fold_clothes_test/images/observation.images.left_wrist/episode_000000/frame_000000.png"
-    )
-    obs["images"]["cam_right_wrist"] = Image.open(
-        "/home/zme/.cache/huggingface/lerobot/zme/fold_clothes_test/images/observation.images.right_wrist/episode_000000/frame_000000.png"
-    )
-    obs["images"]["cam_high"] = np.array(obs["images"]["cam_high"]).transpose([2, 0, 1])
-    obs["images"]["cam_left_wrist"] = np.array(obs["images"]["cam_left_wrist"]).transpose([2, 0, 1])
-    obs["images"]["cam_right_wrist"] = np.array(obs["images"]["cam_right_wrist"]).transpose([2, 0, 1])
 
-    print(obs["images"]["cam_high"].shape)
+    # 控制从臂命令发布的频率，和采集数据的频率一致
+    fps = 18
 
     policy = _websocket_client_policy.WebsocketClientPolicy(
         host=args.host,
@@ -182,31 +157,63 @@ def main(args: Args) -> None:
     for _ in range(2):
         policy.infer(obs_fn())
 
-    action = policy.infer(obs)["actions"][0]
-    len_a = len(action)
-    print(list(action[len_a // 2 :]))
-    print(list(action[: len_a // 2]))
-
     timing_recorder = TimingRecorder()
 
-    # for _ in tqdm.trange(args.num_steps, desc="Running policy"):
-    #     inference_start = time.time()
-    #     action = policy.infer(obs_fn())
-    #     print(action)
-    #     actions = action["actions"]
-    #     print(type(actions))
-    #     print(actions.shape)
-    #     print(actions[0])
-    #     timing_recorder.record("client_infer_ms", 1000 * (time.time() - inference_start))
-    #     for key, value in action.get("server_timing", {}).items():
-    #         timing_recorder.record(f"server_{key}", value)
-    #     for key, value in action.get("policy_timing", {}).items():
-    #         timing_recorder.record(f"policy_{key}", value)
+    inference_start = time.time()
+    max_steps = 5000
+
+    while not ros2_node.observation:
+        time.sleep(1)
+
+    while max_steps and ros2_node.observation:
+        # 至少执行10帧后，才进行新的推理，保证推理过程中的稳定性，过快可能导致频繁抖动。
+        if time.time() - inference_start >= (10.0 / fps) and ros2_node.obs_updated:
+            inference_start = time.time()
+            max_steps -= 1
+            observation = norm_to_pi_input(ros2_node.observation)
+            actions = policy.infer(observation)["actions"]
+            actions = [list(action) for action in actions]
+            actions = norm_from_pi_output(actions)
+            with action_lock:
+                ros2_node.action_chunk = [list(action) for action in actions]
+            print("Update action chunk!!!!")
+            ros2_node.obs_updated = False
+    # ROS2 NODE timer publist actions in speed of fps
 
     timing_recorder.print_all_stats()
 
     if args.timing_file is not None:
         timing_recorder.write_parquet(args.timing_file)
+
+
+def norm_to_pi_input(observation: dict) -> dict:
+    # state = observation["state"]
+    # state[7, 15] = _gripper_to_angular(state[7, 15])
+    # 和数据集是一样的数据，不需要额外再变换处理。
+    return observation
+
+
+def norm_from_pi_output(actions) -> dict:
+    for i in range(len(actions)):
+        actions[i][7] = _unnormalize(actions[i][7], min_val=20, max_val=0)
+        actions[i][15] = _unnormalize(actions[i][15], min_val=20, max_val=0)
+        # reverse left and right. 不需要交换，因为h5转lerobot时已经进行左右交换了
+        # actions[i] = actions[i][8:] + actions[i][:8]
+    return actions
+
+
+def _normalize(x, min_val, max_val):
+    return (x - min_val) / (max_val - min_val)
+
+
+def _unnormalize(x, min_val, max_val):
+    return x * (max_val - min_val) + min_val
+
+
+def _gripper_to_angular(value):
+    # Zme gripper normalization:
+    value = np.clip(value, -5.0, 1.0)
+    return _normalize(value, min_val=1, max_val=-5)  # min_val closed, max_val open
 
 
 def _random_observation_zme() -> dict:
