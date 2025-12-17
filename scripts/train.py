@@ -191,7 +191,11 @@ def train_step(
     return new_state, info
 
 
+from pprint import pprint
+
+
 def main(config: _config.TrainConfig):
+    pprint(config.__dict__)
     init_logging()
     logging.info(f"Running on: {platform.node()}")
 
