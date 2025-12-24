@@ -195,6 +195,7 @@ from pprint import pprint
 
 
 def main(config: _config.TrainConfig):
+    # 打印配置信息
     pprint(config.__dict__)
     init_logging()
     logging.info(f"Running on: {platform.node()}")

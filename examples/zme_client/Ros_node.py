@@ -67,6 +67,7 @@ class RosNode(Node):
         # self.joint_publisher = self.create_publisher(TeleoperationJointCommand, "/tele_joint_cmd_office", 1)
         self.joint_publisher = self.create_publisher(arm_interfaces.msg.MasterArmCommand, "/tele_arm_cmd", 1)
 
+        # 存储的动作执行序列
         self.action_chunk = []
 
         self.fps = 18
@@ -118,6 +119,7 @@ class RosNode(Node):
             self.get_logger().error("ERROR: get joint error")
             return
 
+        # 通道转换，convert (width, height, channels) to (channels, height, width)
         transposed_head_img = np.transpose(head_image, (2, 0, 1))
         transposed_left_img = np.transpose(left_image, (2, 0, 1))
         transposed_right_img = np.transpose(right_image, (2, 0, 1))
@@ -199,26 +201,3 @@ class RosNode(Node):
 
         return left_joint_pos, right_joint_pos  # joint velocities not available
 
-        # # Right arm joint positions and velocities
-        # right_joint_pos = [joint.joint_position for joint in joint_msg.right_arm_joints]
-        # right_joint_vel = [joint.joint_speed for joint in joint_msg.right_arm_joints]
-        # right_gripper_pos = joint_msg.right_gripper.gripper_position
-        # # Normalize gripper position to [0, 1]
-        # right_gripper_pos = (right_gripper_pos - self.gripper_position_close) / (
-        #         self.gripper_position_open - self.gripper_position_close)
-        # right_joint_pos.append(right_gripper_pos)
-        # right_joint_vel.append(joint_msg.right_gripper.gripper_speed)
-        # right_joint_vel = self.rpm2speed(right_joint_vel)
-
-        # # Left arm joint positions and velocities
-        # left_joint_pos = [joint.joint_position for joint in joint_msg.left_arm_joints]
-        # left_joint_vel = [joint.joint_speed for joint in joint_msg.left_arm_joints]
-        # left_gripper_pos = joint_msg.left_gripper.gripper_position
-        # # Normalize gripper position to [0, 1]
-        # left_gripper_pos = (left_gripper_pos - self.gripper_position_close) / (
-        #         self.gripper_position_open - self.gripper_position_close)
-        # left_joint_pos.append(left_gripper_pos)
-        # left_joint_vel.append(joint_msg.left_gripper.gripper_speed)
-        # left_joint_vel = self.rpm2speed(left_joint_vel)
-
-        # return right_joint_pos + left_joint_pos, right_joint_vel + left_joint_vel

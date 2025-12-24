@@ -78,6 +78,7 @@ class AlohaInputs(transforms.DataTransformFn):
         # Actions are only available during training.
         if "actions" in data:
             actions = np.asarray(data["actions"])
+            # 训练时需要将动作转换回Aloha空间，range [-1, 1]
             actions = _encode_actions_inv(actions, adapt_to_pi=self.adapt_to_pi)
             inputs["actions"] = actions
 
@@ -98,6 +99,7 @@ class AlohaOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 14 dims.
         actions = np.asarray(data["actions"][:, :16])
+        # 将模型输出的动作范围从-1到1归一化到0到1之间，用于后续发送给从臂执行动作。
         return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 
@@ -120,27 +122,6 @@ def _gripper_to_angular(value):
     # Zme gripper normalization: 翻转最大最小值并归一化到0-1之间
     value = np.clip(value, -5.0, 1.0)
     return _normalize(value, min_val=1, max_val=-5)  # min_val closed 1, max_val open -5
-
-    # # Aloha transforms the gripper positions into a linear space. The following code
-    # # reverses this transformation to be consistent with pi0 which is pretrained in
-    # # angular space.
-    # #
-    # # These values are coming from the Aloha code:
-    # # PUPPET_GRIPPER_POSITION_OPEN, PUPPET_GRIPPER_POSITION_CLOSED
-    # value = _unnormalize(value, min_val=0.01844, max_val=0.05800)
-
-    # # This is the inverse of the angular to linear transformation inside the Interbotix code.
-    # def linear_to_radian(linear_position, arm_length, horn_radius):
-    #     value = (horn_radius**2 + linear_position**2 - arm_length**2) / (2 * horn_radius * linear_position)
-    #     return np.arcsin(np.clip(value, -1.0, 1.0))
-
-    # # The constants are taken from the Interbotix code.
-    # value = linear_to_radian(value, arm_length=0.036, horn_radius=0.022)
-
-    # # pi0 gripper data is normalized (0, 1) between encoder counts (2405, 3110).
-    # # There are 4096 total encoder counts and aloha uses a zero of 2048.
-    # # Converting this to radians means that the normalized inputs are between (0.5476, 1.6296)
-    # return _normalize(value, min_val=0.5476, max_val=1.6296)
 
 
 def _gripper_from_angular(value):
@@ -210,6 +191,6 @@ def _encode_actions_inv(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np
         # actions[:, [7, 15]] = _gripper_from_angular_inv(actions[:, [7, 15]])
         # gripper min 0, gripper max 1
         actions[:, [7, 15]] = np.clip(actions[:, [7, 15]], 0, 1.0)
-        # min_val closed, max_val open，数据集中action范围值是0到1，但是模型最好的输入范围是-1到1，所以这里进行反归一化到-1到1
+        # min_val closed, max_val open，数据集中action范围值是0到1，但是模型预训练中的action范围是-1到1，所以这里进行反归一化到-1到1
         actions[:, [7, 15]] = _unnormalize(actions[:, [7, 15]], min_val=-1, max_val=1)
     return actions

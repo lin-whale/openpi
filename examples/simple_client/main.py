@@ -149,13 +149,14 @@ def main(args: Args) -> None:
             -5.018,
         ]
     )
-    # 从本地加载图像数据
+    # 生成随机图像数据
     obs["images"] = {
         "cam_high": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
         "cam_left_wrist": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
         "cam_right_wrist": np.random.randint(256, size=(3, 480, 640), dtype=np.uint8),
     }
     obs["prompt"] = "Fold the shorts on the bed."
+    # 从本地加载图像数据
     obs["images"]["cam_high"] = Image.open(
         "/home/zme/.cache/huggingface/lerobot/zme/fold_clothes_test/images/observation.images.left_wrist/episode_000000/frame_000000.png"
     )

@@ -237,9 +237,9 @@ class LeRobotZmeDataConfig(DataConfigFactory):
     # If true, this will convert the joint and gripper values from the standard Aloha space to
     # the space used by the pi internal runtime which was used to train the base model. People who
     # use standard Aloha data should set this to true.
-    adapt_to_pi: bool = False
+    adapt_to_pi: bool = True
 
-    # Repack transforms.
+    # Repack transforms. This is used to repack the data into the format expected by the model.
     repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
         default=_transforms.Group(
             inputs=[
@@ -268,6 +268,7 @@ class LeRobotZmeDataConfig(DataConfigFactory):
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
         )
         if self.use_delta_joint_actions:
+            # 对于Pi0模型，joint的输入和输出是delta，所以这里需要将joint的输入输出进行差分转换。
             delta_action_mask = _transforms.make_bool_mask(7, -1, 7, -1)
             data_transforms = data_transforms.push(
                 inputs=[_transforms.DeltaActions(delta_action_mask)],

@@ -41,7 +41,7 @@ def create_empty_dataset(
     has_effort: bool = False,
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
 ) -> LeRobotDataset:
-    # Correct order of motors for Pi model Inputs
+    # Correct order of motors for Pi model Inputs， 用于zme机器人的关节顺序
     motors = [
         "left_1",
         "left_2",
@@ -130,7 +130,7 @@ def create_empty_dataset(
 
 def get_cameras(hdf5_files: list[Path]) -> list[str]:
     with h5py.File(hdf5_files[0], "r") as ep:
-        # ignore depth channel, not currently handled
+        # ignore depth channel, not currently handled， "/observations/images"根据h5文件修改。
         return [key for key in ep["/observations/images"].keys() if "depth" not in key]  # noqa: SIM118
 
 
@@ -189,8 +189,7 @@ def load_raw_episode_data(
             ],
         )
 
-        # 把state, action, velocity 顺序转换为 left_joint, left_gripper, right_joint, right_gripper
-        # print("Before swapping:", state[0])
+        # 把state, action, velocity 顺序转换为 left_joint, left_gripper, right_joint, right_gripper， 这是因为Pi0预训练数据中的关节顺序是这样的。
         state_dim = state.shape[1]
         front, back = state[:, : state_dim // 2], state[:, state_dim // 2 :]
         state = torch.cat([back, front], dim=1)
@@ -199,7 +198,6 @@ def load_raw_episode_data(
         if velocity is not None:
             front_v, back_v = velocity[:, : state_dim // 2], velocity[:, state_dim // 2 :]
             velocity = torch.cat([back_v, front_v], dim=1)
-        # print("After swapping:", state[0])
 
     return imgs_per_cam, state, action, velocity, effort
 
@@ -263,6 +261,7 @@ def port_aloha(
 
     hdf5_files = sorted(raw_dir.glob("episode_*.hdf5"))
 
+    # 创建空数据集
     dataset = create_empty_dataset(
         repo_id,
         robot_type="mobile_aloha" if is_mobile else "aloha",
@@ -271,6 +270,7 @@ def port_aloha(
         has_velocity=has_velocity(hdf5_files),
         dataset_config=dataset_config,
     )
+    # 从h5文件中读取，填充数据集
     dataset = populate_dataset(
         dataset,
         hdf5_files,

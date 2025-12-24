@@ -131,10 +131,12 @@ def ros2_spin(node):
 def main(args: Args) -> None:
     action_lock = Lock()
     rclpy.init()
+    # 创建ROS2节点，记录图像和关节信息，并发布动作命令。
     ros2_node = RosNode(action_lock=action_lock)
     ros2_thread = Thread(target=ros2_spin, args=(ros2_node,))
     ros2_thread.start()
     time.sleep(2)
+    # 创建一个随机的观测，用于测试推理
     obs_fn = {
         EnvMode.ALOHA: _random_observation_aloha,
         EnvMode.ALOHA_SIM: _random_observation_aloha,
@@ -160,8 +162,10 @@ def main(args: Args) -> None:
     timing_recorder = TimingRecorder()
 
     inference_start = time.time()
+    # 运行推理的最大步数
     max_steps = 5000
 
+    # 得到初始观测数据后，开始循环推理和发布动作
     while not ros2_node.observation:
         time.sleep(1)
 
@@ -177,8 +181,9 @@ def main(args: Args) -> None:
             with action_lock:
                 ros2_node.action_chunk = [list(action) for action in actions]
             print("Update action chunk!!!!")
+            # updated 设为False，等待下一次观测更新时再进行新的推理
             ros2_node.obs_updated = False
-    # ROS2 NODE timer publist actions in speed of fps
+    # ROS2 NODE timer publish actions in speed of fps
 
     timing_recorder.print_all_stats()
 
