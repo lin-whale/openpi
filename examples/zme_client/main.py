@@ -179,7 +179,9 @@ def main(args: Args) -> None:
             actions = [list(action) for action in actions]
             actions = norm_from_pi_output(actions)
             with action_lock:
-                ros2_node.action_chunk = [list(action) for action in actions]
+                # 计算推理导致延迟的步数
+                inference_delay_steps = int((time.time() - inference_start) * fps)
+                ros2_node.action_chunk = [list(action) for action in actions][inference_delay_steps:]
             print("Update action chunk!!!!")
             # updated 设为False，等待下一次观测更新时再进行新的推理
             ros2_node.obs_updated = False
