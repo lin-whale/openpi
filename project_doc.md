@@ -1,6 +1,18 @@
 # pi0 项目说明文档
 
-## Installation
+## pi0 模型结构
+![alt text](<Screenshot from 2025-12-24 17-40-29.png>)
+![alt text](<Screenshot from 2025-12-24 17-41-35.png>)
+
+## pi0.5改进 
+1. 预训练任务的泛化性    2. 子任务分解模块
+![alt text](<Screenshot from 2025-12-25 09-47-05.png>)
+
+## pi0.6 引入价值函数和强化学习
+![alt text](<Screenshot from 2025-12-25 09-56-12.png>)
+
+
+## 1. Installation
 
 We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies. See the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up. Once uv is installed, run the following to set up the environment:
 
@@ -11,7 +23,7 @@ GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 
 NOTE: `GIT_LFS_SKIP_SMUDGE=1` is needed to pull LeRobot as a dependency.
 
-## 数据集转换脚本
+## 2. 数据集转换脚本
 ```
 uv run examples/aloha_real/convert_aloha_data_to_lerobot.py --raw-dir /home/zme/data/robot_data/fold_clothes/ --repo-id zme/fold_clothes
 ```
@@ -24,12 +36,12 @@ uv run scripts/compute_norm_stats.py --config-name pi0_zme --repo_id zme/fold_cl
 结果会保存在assets/pi0_zme/zme/fold_clothes/norm_stats.json
 将这个文件复制到 /home/zme/.cache/huggingface/lerobot/zme/fold_clothes/norm_stats.json
 
-## 训练
+## 3. 训练
 ```
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_zme --exp-name=experiment_fold_clothes --overwrite --batch-size 32
 ```
 
-## 推理
+## 4. 推理
 ```
 cd openpi
 export PYTHON_PATH=/opt/ros/humble/lib/python3.10/site-packages         # 根据电脑实际情况修改ros2的python包路径
