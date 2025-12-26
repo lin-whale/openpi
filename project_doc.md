@@ -39,6 +39,7 @@ uv run scripts/compute_norm_stats.py --config-name pi0_zme --repo_id zme/fold_cl
 ## 3. 训练
 ```
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_zme --exp-name=experiment_fold_clothes --overwrite --batch-size 32
+训练的结果会保存在 checkpoints/pi0_zme/experiment_fold_clothes
 ```
 
 ## 4. 推理
